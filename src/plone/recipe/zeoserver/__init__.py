@@ -292,14 +292,43 @@ class Recipe:
         if self.zeo_conf is None:
             self.zeo_conf = os.path.join(location, 'etc', 'zeo.conf')
 
+        if self._relative_paths:
+            class zeo_conf_path(str):
+                def __repr__(self):
+                    return str(self)
+
+            self.zeo_conf = zeo_conf_path(
+                        zc.buildout.easy_install._relativitize(
+                            self.zeo_conf,
+                            options['buildout-directory'] + os.sep,
+                            self._relative_paths
+                        )
+                    )
+
         _, ws = self.egg.working_set(['plone.recipe.zeoserver'])
 
-        path = (os.path.pathsep.join(self.ws_locations)
-                + os.path.pathsep
-                + os.path.pathsep.join(self.module_paths))
-        initialization = """
-        import os; os.environ['PYTHONPATH'] = %r
-        """.strip() % path
+        if self._relative_paths:
+            relative_python_paths = []
+            python_paths = self.ws_locations + self.module_paths
+            for p in python_paths:
+                relative_python_paths.append(
+                    zc.buildout.easy_install._relativitize(
+                        p,
+                        options['buildout-directory'] + os.sep,
+                        self._relative_paths
+                    )
+                )
+
+            initialization = 'python_path = %r' % relative_python_paths
+            initialization += "\nimport os; os.environ['PYTHONPATH'] = (os.path.pathsep.join(python_path))"
+
+        else:
+            path = (os.path.pathsep.join(self.ws_locations)
+                    + os.path.pathsep
+                    + os.path.pathsep.join(self.module_paths))
+            initialization = """
+            import os; os.environ['PYTHONPATH'] = %r
+            """.strip() % path
         zc.buildout.easy_install.scripts(
             [(self.name, 'plone.recipe.zeoserver.ctl', 'main')],
             ws, options['executable'], options['bin-directory'],
